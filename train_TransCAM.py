@@ -26,7 +26,7 @@ if __name__ == '__main__':
     parser.add_argument("--val_list", default="voc12/val.txt", type=str)
     parser.add_argument("--session_name", default="TransCAM", type=str)
     parser.add_argument("--crop_size", default=512, type=int)
-    parser.add_argument("--weights", required=True, type=str)
+    parser.add_argument("--weights", type=str)
     parser.add_argument("--voc12_root", default='VOCdevkit/VOC2012', type=str)
     parser.add_argument("--tblog_dir", default='./tblog', type=str)
     parser.add_argument("--save_dir", default='./', type=str)
@@ -60,21 +60,25 @@ if __name__ == '__main__':
 
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.wt_dec, eps=1e-8)
 
-    checkpoint = torch.load(args.weights, map_location='cpu')
-    if 'model' in checkpoint.keys():
-        checkpoint = checkpoint['model']
+    if args.weights:
+        print("Learning from pretrained weights")
+        checkpoint = torch.load(args.weights, map_location='cpu')
+        if 'model' in checkpoint.keys():
+            checkpoint = checkpoint['model']
+        else:
+            checkpoint = checkpoint
+        model_dict = model.state_dict()
+        for k in ['trans_cls_head.weight', 'trans_cls_head.bias']:
+            print(f"Removing key {k} from pretrained checkpoint")
+            del checkpoint[k]
+        for k in ['conv_cls_head.weight', 'conv_cls_head.bias']:
+            print(f"Removing key {k} from pretrained checkpoint")
+            del checkpoint[k]
+        pretrained_dict = {k: v for k, v in checkpoint.items() if k in model_dict}
+        model_dict.update(pretrained_dict)
+        model.load_state_dict(model_dict)
     else:
-        checkpoint = checkpoint
-    model_dict = model.state_dict()
-    for k in ['trans_cls_head.weight', 'trans_cls_head.bias']:
-        print(f"Removing key {k} from pretrained checkpoint")
-        del checkpoint[k]
-    for k in ['conv_cls_head.weight', 'conv_cls_head.bias']:
-        print(f"Removing key {k} from pretrained checkpoint")
-        del checkpoint[k]
-    pretrained_dict = {k: v for k, v in checkpoint.items() if k in model_dict}
-    model_dict.update(pretrained_dict)
-    model.load_state_dict(model_dict)
+        print("Learning from scratch")
 
     model = torch.nn.DataParallel(model).cuda()
     model.train()
